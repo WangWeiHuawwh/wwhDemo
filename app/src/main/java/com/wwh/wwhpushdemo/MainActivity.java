@@ -34,7 +34,7 @@ public class MainActivity extends ActionBarActivity {
                 try {
                     bindService(mIntent, conn, Context.BIND_AUTO_CREATE);
                 } catch (Exception e) {
-
+                    Log.d("DemoLog", "e=" + e.getMessage());
                 }
 
             }

@@ -15,6 +15,7 @@ import android.os.PowerManager;
 import android.os.RemoteException;
 import android.support.v4.app.NotificationCompat;
 import android.support.v4.app.TaskStackBuilder;
+import android.support.v4.content.WakefulBroadcastReceiver;
 import android.util.Log;
 import com.wwh.watch.Subprocess;
 import com.wwh.watch.WatchDog;
@@ -26,6 +27,8 @@ public class PushService extends Service implements SocketListener {
     private ISocketServiceCallback mISocketServiceCallback = null;
     private static PushManager mPushManager = null;
     private ConnectionChangeReceiver mConnectionChangeReceiver = new ConnectionChangeReceiver();
+    private int pid = 0;
+    private static final String KEY_FOR_WEAK_LOCK = "weak-lock";
     private ISocketService.Stub mBinder = new ISocketService.Stub() {
 
         @Override
@@ -57,6 +60,7 @@ public class PushService extends Service implements SocketListener {
     public void onCreate() {
         super.onCreate();
         Log.d("DemoLog", "service create pid=" + android.os.Process.myPid());
+        pid = android.os.Process.myPid();
         Subprocess.create(this, WatchDog.class);
         mPushManager = new PushManager(getApplication(), this);
         IntentFilter filter = new IntentFilter();
@@ -64,10 +68,27 @@ public class PushService extends Service implements SocketListener {
         registerReceiver(mConnectionChangeReceiver, filter);
     }
 
+    @Override
+    public void onTaskRemoved(Intent rootIntent) {
+        super.onTaskRemoved(rootIntent);
+        //stopSelf();
+        startService(new Intent(this, PushService.class));
+        Log.d("DemoLog", "onTaskRemoved");
+    }
+
     public static void connection() {
         if (mPushManager != null) {
             mPushManager.reconnect();
         }
+    }
+
+    public static void startForWeakLock(Context context, Intent intent) {
+        Intent serviceIntent = new Intent(context, PushService.class);
+        context.startService(serviceIntent);
+        intent.putExtra(KEY_FOR_WEAK_LOCK, true);
+        Intent myIntent = new Intent(context, PushService.class);
+        // using wake lock to start service
+        WakefulBroadcastReceiver.startWakefulService(context, myIntent);
     }
 
     public static void close() {
@@ -78,6 +99,12 @@ public class PushService extends Service implements SocketListener {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        if (intent != null) {
+            // remove wake lock
+            if (intent.getBooleanExtra(KEY_FOR_WEAK_LOCK, false)) {
+                BootCompletedReceiver.completeWakefulIntent(intent);
+            }
+        }
         startForeground(0, new Notification());
         return START_STICKY;
     }
